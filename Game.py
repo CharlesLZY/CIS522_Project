@@ -4,7 +4,7 @@ from enum import Enum
 from collections import deque
 import random
 
-from utils import Direction, Reward
+from utils import Direction, Reward, ManhattanDistance
 
 
 class Color(Enum):
@@ -16,16 +16,16 @@ class Color(Enum):
     GREEN = (0,255,0)
 
 class SnakeGame:
-    def __init__(self, Width=16, Height=16, BLOCK_SIZE=20, SPEED=50, VERBOSE=False, SEED=0):
+    def __init__(self, W=16, H=16, BLOCK_SIZE=20, SPEED=50, VERBOSE=False, SEED=None):
         ### set random seed
         random.seed(SEED)
 
         ### Set Game Parameter
-        self.Width = Width * BLOCK_SIZE ### window width
-        self.Height = Height * BLOCK_SIZE ### window height
+        self.W = W
+        self.H = H
+        self.Width = W * BLOCK_SIZE ### window width
+        self.Height = H * BLOCK_SIZE ### window height
         self.BLOCK_SIZE = BLOCK_SIZE if BLOCK_SIZE > 20 else 20 ### block size for display
-        self.W = self.Width // BLOCK_SIZE
-        self.H = self.Height // BLOCK_SIZE
         self.SPEED = SPEED
         self.VERBOSE = VERBOSE ### whether to print game information
 
@@ -100,16 +100,18 @@ class SnakeGame:
             return self.head_dir() ### default: move forward
 
     ### play the game
-    def _play(self):
+    def _play(self, move=None): ### we can specify the move instead of let the agent decide the next move
         reward = Reward.LIVE.value
         dead = False
 
         if self.food_pos:
-            dx, dy = self._nextMove() ### direction
+            prev_distance = ManhattanDistance(self.head_pos, self.food_pos) ### previous distance from snake head to food
+
+            ### if the next move has been specified, we will ignore the agent's decision
+            dx, dy = move if move else self._nextMove() ### direction
             new_head_pos = (self.head_pos[0] + dx, self.head_pos[1] + dy)
-
+            
             self.head_pos = new_head_pos ### update head pos
-
             self.snake.append(new_head_pos) ### add new head to the snake
 
             if new_head_pos != self.food_pos:
@@ -123,7 +125,13 @@ class SnakeGame:
                         print(f"Round: {self.round} Score: {self.score} Steps: {self.current_step}")
                     self.record.append((self.score, self.current_step))
                     self._restart()
-                    
+                else:
+                    cur_distance = ManhattanDistance(self.head_pos, self.food_pos) ### current distance from snake head to food
+                    if cur_distance > prev_distance: ### get further from the food
+                        reward = Reward.FURTHER.value
+                    elif cur_distance < prev_distance: ### get closer to the food
+                        reward = Reward.CLOSER.value
+
             else: ### the snake ate the food
                 ### in this case, there must not be collision
                 self.score += 1

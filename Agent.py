@@ -1,4 +1,5 @@
-from random import choice
+import random
+
 from utils import Direction
 
 class Agent:
@@ -7,5 +8,5 @@ class Agent:
         self.game._setAgent(self)
     
     def _move(self):
-        return choice(list(Direction)).value
+        return random.choice(list(Direction)).value
         
