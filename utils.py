@@ -20,20 +20,18 @@ def ManhattanDistance(a, b):
 class priorityQueue: # pop the entry with the lowest priority
     def  __init__(self):
         self.heap = []
-        self.count = 0
-
+        
     def push(self, item, priority):
-        entry = (priority, self.count, item)
+        entry = (priority, item)
         heappush(self.heap, entry)
-        self.count += 1
-
+        
     def pop(self):
-        (_, _, item) = heappop(self.heap)
+        _, item = heappop(self.heap)
         return item
 
     def isEmpty(self):
         return len(self.heap) == 0
-        
+
 
 def LongLiveSnake():
     print("\
