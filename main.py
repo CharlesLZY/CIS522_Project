@@ -5,6 +5,7 @@ from Agent import Agent
 from BoringAgent import BoringAgent
 from SearchAgent import GreedyAgent, AstarAgent
 from QLearningAgent import QLearningAgent
+from DeepQLearningAgent import DeepQLearningAgent
 
 import utils
 
@@ -15,8 +16,9 @@ parser.add_argument("-b", "--block_size", type=int, default=20, help="block size
 parser.add_argument("-s", "--speed", type=int, default=50, help="refresh speed")
 parser.add_argument("-v", "--verbose", action="store_true", help="print verbose")
 parser.add_argument("-seed", type=int, default=0, help="random seed")
-parser.add_argument("-a", "--agent", type=str, default="", choices=["", "random", "boring", "greedy", "astar", "qlearning"], help="agent type")
-parser.add_argument("-f", "--file", type=str, help="model file")
+parser.add_argument("-a", "--agent", type=str, default="", choices=["", "random", "boring", "greedy", "astar", "qlearning", "deepq"], help="agent type")
+parser.add_argument("-f", "--file", type=str, help="pretrained model")
+parser.add_argument("-t", "--model_type", type=str, choices=["linear"], help="model type")
 
 if __name__ == "__main__":
 
@@ -43,10 +45,19 @@ if __name__ == "__main__":
         agent = AstarAgent(game)
     elif args.agent == "qlearning":
         if args.file:
-            agent = QLearningAgent(game, args.file)
+            agent = QLearningAgent(game, pretrained_model=args.file)
         else:
             print("Please specify the model to load. Usage: main.py -a qlearning -f model.pkl")
             exit()
+    elif args.agent == "deepq":
+        if not args.file:
+            print("Please specify the model to load. Usage: main.py -a qlearning -f model.pkl")
+            exit()
+        if not args.model_type:
+            print("Please specify the model type. Usage: main.py -a qlearning -f model.pkl")
+            exit()
+        agent = DeepQLearningAgent(game, model_type=args.model_type, pretrained_model=args.file)
+        agent.model.eval()
 
     while True:
         game._play()

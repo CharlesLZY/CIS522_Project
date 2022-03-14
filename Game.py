@@ -14,6 +14,7 @@ class Color(Enum):
     BLACK = (0,0,0)
     RED   = (255,0,0)
     GREEN = (0,255,0)
+    BLUE   = (0,0,255)
 
 class SnakeGame:
     def __init__(self, W=16, H=16, BLOCK_SIZE=20, SPEED=50, VERBOSE=False, SEED=None):
@@ -23,8 +24,8 @@ class SnakeGame:
         ### Set Game Parameter
         self.W = W
         self.H = H
-        self.Width = W * BLOCK_SIZE ### window width
-        self.Height = H * BLOCK_SIZE ### window height
+        self.Width = (W+2) * BLOCK_SIZE ### window width
+        self.Height = (H+2) * BLOCK_SIZE ### window height
         self.BLOCK_SIZE = BLOCK_SIZE if BLOCK_SIZE > 20 else 20 ### block size for display
         self.SPEED = SPEED
         self.VERBOSE = VERBOSE ### whether to print game information
@@ -41,8 +42,19 @@ class SnakeGame:
         self.clock = pygame.time.Clock()
 
         ### Initial Game State
+        self._setWall()
         self._restart()
         self._renderGUI()
+    
+    ### for the scalability to implement maze
+    def _setWall(self):
+        self.wall = set()
+        for i in range(-1, self.W+1):
+            self.wall.add((i, -1))
+            self.wall.add((i, self.H))
+        for i in range(-1, self.H+1):
+            self.wall.add((-1, i))
+            self.wall.add((self.W, i))
     
     ### reset the game state to initial state
     def _restart(self):
@@ -167,18 +179,22 @@ class SnakeGame:
         BLOCK_SIZE = self.BLOCK_SIZE
         BORDER = 4
 
+        ### draw the wall
+        for x,y in self.wall:
+            pygame.draw.rect(self.display, Color.BLACK.value, pygame.Rect((x+1) * BLOCK_SIZE, (y+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+
         ### draw the snake
         for x,y in self.snake:
-            pygame.draw.rect(self.display, Color.GREY1.value, pygame.Rect(x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, Color.GREY2.value, pygame.Rect(x*BLOCK_SIZE + BORDER, y*BLOCK_SIZE + BORDER, BLOCK_SIZE-2*BORDER, BLOCK_SIZE-2*BORDER))
+            pygame.draw.rect(self.display, Color.GREY1.value, pygame.Rect((x+1) * BLOCK_SIZE, (y+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+            pygame.draw.rect(self.display, Color.GREY2.value, pygame.Rect((x+1) * BLOCK_SIZE + BORDER, (y+1) * BLOCK_SIZE + BORDER, BLOCK_SIZE - 2 * BORDER, BLOCK_SIZE - 2 * BORDER))
         
         ### color the head
-        pygame.draw.rect(self.display, Color.BLACK.value, pygame.Rect(self.snake[-1][0]*BLOCK_SIZE, self.snake[-1][1]*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+        pygame.draw.rect(self.display, Color.BLUE.value, pygame.Rect((self.snake[-1][0]+1) * BLOCK_SIZE, (self.snake[-1][1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
         ### color the tail
-        pygame.draw.rect(self.display, Color.RED.value, pygame.Rect(self.snake[0][0]*BLOCK_SIZE, self.snake[0][1]*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+        pygame.draw.rect(self.display, Color.RED.value, pygame.Rect((self.snake[0][0]+1) * BLOCK_SIZE, (self.snake[0][1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
 
         if self.food_pos: ### if there is food, draw the food
-            pygame.draw.rect(self.display, Color.GREEN.value, pygame.Rect(self.food_pos[0]*BLOCK_SIZE, self.food_pos[1]*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+            pygame.draw.rect(self.display, Color.GREEN.value, pygame.Rect((self.food_pos[0]+1) * BLOCK_SIZE, (self.food_pos[1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
         
         pygame.display.update()
         self.clock.tick(self.SPEED)

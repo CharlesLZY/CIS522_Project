@@ -4,8 +4,7 @@ from utils import Direction
 ### the snake will move in the fixed pattern to win the game
 class BoringAgent(Agent):
     def __init__(self, game):
-        self.game = game
-        self.game._setAgent(self)
+        super(BoringAgent, self).__init__(game)
         self.flag = 1 ### for odd-sized case, flag to switch the move pattern
 
     def _move(self):

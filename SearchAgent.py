@@ -8,6 +8,9 @@ Without forward checking, search agent can not avoid suicuiding
 '''
 
 class GreedyAgent(Agent):
+    def __init__(self, game):
+        super(GreedyAgent, self).__init__(game)
+
     def _move(self):
         head_pos = self.game.head_pos
         food_pos = self.game.food_pos
@@ -34,7 +37,7 @@ class AstarAgent(Agent):
         else:
             print("The map is too large for search agent.")
         
-
+    ### Do not use whitespace
     def __valid_move(self, snake, food_pos):
         forward = (snake[-1][0] - snake[-2][0], snake[-1][1] - snake[-2][1])
         back = (-forward[0], -forward[1])
@@ -46,7 +49,7 @@ class AstarAgent(Agent):
             pos = (snake[-1][0] + d[0], snake[-1][1] + d[1])
             if pos == snake[0]: ### tail
                 valid.append(d)
-            elif pos[0] < self.game.W and pos[1] < self.game.H and pos not in snake:
+            elif pos not in snake and pos not in self.game.wall:
                 valid.append(d)
         
         return valid

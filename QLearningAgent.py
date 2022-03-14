@@ -20,12 +20,10 @@ Therefore, the Q table size will be 128 * 4 = 512.
 '''
 
 class QLearningAgent(Agent):
-    def __init__(self, game, model=None):
-        self.game = game
-        self.game._setAgent(self)
-
-        if model:
-            self._loadModel(model)
+    def __init__(self, game, pretrained_model=None):
+        super(QLearningAgent, self).__init__(game)
+        if pretrained_model:
+            self._loadModel(pretrained_model)
         else:
             self.__generateQTable()
 
@@ -104,14 +102,14 @@ class QLearningAgent(Agent):
             sample = reward + discount * max(map(lambda a: self.QTable[(new_state, a)], actions))
         self.QTable[Q_state] = (1 - lr) * self.QTable[Q_state] + lr * sample
 
-    def _loadModel(self, filename):
-        with open(filename, 'rb') as f:
-            self.QTable = pickle.loads(f.read())
-
     def _saveModel(self, filename="model/ql.pkl"):
         f = open(filename, 'wb')
         f.write(pickle.dumps(self.QTable))
         f.close()
+
+    def _loadModel(self, filename):
+        with open(filename, 'rb') as f:
+            self.QTable = pickle.loads(f.read())
 
     def _move(self):
         state = self.__cur_state()
@@ -120,9 +118,9 @@ class QLearningAgent(Agent):
             Q_vals[action.value] = self.QTable[(state, action.value)]
         return max(Q_vals, key=Q_vals.get) ### return the action which has the max Q-value in current state
 
-    def train(self, lr=0.9, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=100):
+    def train(self, alpha=0.9, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=200):
         '''
-        lr: learning rate
+        alpha: learning rate
         discount: discount to make the Q-value converge
         epsilon: possibility to make the random move to explore the state
         ed: epsilon decay rate of epsilon after each round training
@@ -130,7 +128,7 @@ class QLearningAgent(Agent):
         '''
         for epoch in range(n_epoch):
             t = 0 ### to avoid infinite loop like the snake keep chasing its tail
-            while t < 1000 :
+            while t < 1000:
                 action = self._move()
                 if random.uniform(0,1) < epsilon: ### force to make random move to explore state space
                     action = random.choice(list(Direction)).value
@@ -138,7 +136,7 @@ class QLearningAgent(Agent):
                 Q_state = (self.__cur_state(), action) ### Q(s,a)
                 reward, dead = self.game._play(move=action) ### reward and whether the game has ended
                 new_state = self.__cur_state() if not dead else None ### s'
-                self.__updateQValue(reward, Q_state, new_state, lr, discount)
+                self.__updateQValue(reward, Q_state, new_state, alpha, discount)
 
                 if dead:
                     epsilon -= ed ### decay the epsilon
