@@ -12,6 +12,7 @@ from Agent import Agent
 from utils import Direction
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+print(DEVICE)
 
 class LinearModel(nn.Module):
     def __init__(self,input_size=6, hidden_size=128, output_size=4):
@@ -104,7 +105,7 @@ class DeepQLearningAgent(Agent):
         else:
             state[5] = 0
         
-        return torch.tensor(state, dtype=torch.float).cuda()
+        return torch.tensor(state, dtype=torch.float).to(DEVICE)
     
     def _move(self):
         directions = [d.value for d in Direction]
@@ -117,7 +118,7 @@ class DeepQLearningAgent(Agent):
         torch.save(self.model.state_dict(), filename)
 
     def _loadModel(self, filename):
-        self.model.load_state_dict(torch.load(filename))
+        self.model.load_state_dict(torch.load(filename, map_location=torch.device(DEVICE)))
 
     def __train_step(self, optimizer, criterion, discount, state, action, reward, new_state):
         directions = [d.value for d in Direction]
@@ -138,7 +139,7 @@ class DeepQLearningAgent(Agent):
         optimizer.step()
 
 
-    def train(self, lr=0.01, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=200):
+    def train(self, lr=0.01, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=200, filename="model/new_model.pth"):
         '''
         lr: learning rate
         discount: discount to make the Q-value converge
@@ -167,14 +168,17 @@ class DeepQLearningAgent(Agent):
                     break
 
                 t += 1
+            if epoch % 10 == 0:
+                print(f"Current epoch: {epoch} Highest Score: {max(self.game.record)}")
         
-        self._saveModel()
+        self._saveModel(filename=filename)
 
 
 if __name__ == "__main__":
     game = SnakeGame(W=7, H=7)
     agent = DeepQLearningAgent(game, "linear")
-    agent.train()
+    agent.train(filename='model/linear-cpu.pth')
+
     # agent = DeepQLearningAgent(game, "linear", pretrained_model="model/linear.pth")
     # agent._saveModel()
     # while True:
