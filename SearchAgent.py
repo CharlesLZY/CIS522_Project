@@ -36,6 +36,7 @@ class AstarAgent(Agent):
             self.path = []
         else:
             print("The map is too large for search agent.")
+            exit()
         
     ### Do not use whitespace
     def __valid_move(self, snake, food_pos):

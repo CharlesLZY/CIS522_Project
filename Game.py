@@ -24,8 +24,8 @@ class SnakeGame:
         ### Set Game Parameter
         self.W = W
         self.H = H
-        self.Width = (W+2) * BLOCK_SIZE ### window width
-        self.Height = (H+2) * BLOCK_SIZE ### window height
+        self.Width = (self.W+2) * BLOCK_SIZE ### window width 
+        self.Height = (self.H+2) * BLOCK_SIZE ### window height 
         self.BLOCK_SIZE = BLOCK_SIZE if BLOCK_SIZE > 20 else 20 ### block size for display
         self.SPEED = SPEED
         self.VERBOSE = VERBOSE ### whether to print game information
@@ -61,6 +61,7 @@ class SnakeGame:
         self.round += 1 ### a new round start
 
         self.head_pos = (self.W // 2, self.H // 2) ### the initial postion of head
+        ### snake[-1] is head and snake[0] is tail
         self.snake = deque([(self.head_pos[0], self.head_pos[1] + 1), self.head_pos]) ### for fast updating snake
         self.whitespace = set([(x,y) for x in range(self.W) for y in range(self.H)]) ### for fast generating new food 
         self.whitespace.remove(self.snake[0])
@@ -112,7 +113,7 @@ class SnakeGame:
             return self.head_dir() ### default: move forward
 
     ### play the game
-    def _play(self, move=None): ### we can specify the move instead of let the agent decide the next move
+    def _play(self, move=None, GUI=True): ### we can specify the move instead of let the agent decide the next move
         reward = Reward.LIVE.value
         dead = False
 
@@ -126,6 +127,7 @@ class SnakeGame:
             self.head_pos = new_head_pos ### update head pos
             self.snake.append(new_head_pos) ### add new head to the snake
 
+            
             if new_head_pos != self.food_pos:
                 self.whitespace.add(self.snake.popleft()) ### add the tail to the whitespace and remove the tail from the snake
 
@@ -162,8 +164,11 @@ class SnakeGame:
                 print(f"Round: {self.round} Score: {self.score} Steps: {self.current_step}")
             self.record.append((self.score, self.current_step))
             self._restart()
+        
 
-        self._renderGUI() ### render current state
+        if GUI:
+            self._renderGUI() ### render current state
+
         return reward, dead
 
 
