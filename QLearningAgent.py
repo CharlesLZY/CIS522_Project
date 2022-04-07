@@ -118,7 +118,7 @@ class QLearningAgent(Agent):
             Q_vals[action.value] = self.QTable[(state, action.value)]
         return max(Q_vals, key=Q_vals.get) ### return the action which has the max Q-value in current state
 
-    def train(self, alpha=0.9, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=200):
+    def train(self, alpha=0.9, discount=0.8, epsilon=1.0, ed=0.01, n_epoch=200,  filename="model/ql.pkl"):
         '''
         alpha: learning rate
         discount: discount to make the Q-value converge
@@ -144,9 +144,9 @@ class QLearningAgent(Agent):
 
                 t += 1
             
-        self._saveModel()
+        self._saveModel(filename = filename)
 
 if __name__ == "__main__":
-    game = SnakeGame(W=7, H=7)
+    game = SnakeGame(W=5, H=5)
     agent = QLearningAgent(game)
-    agent.train()
+    agent.train(epsilon=1.0, ed=0.005, n_epoch=200, filename='model/test.pth')

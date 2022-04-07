@@ -11,6 +11,7 @@ from Game import SnakeGame
 from Agent import Agent
 from utils import Direction
 
+
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 # print(DEVICE)
 
@@ -73,7 +74,7 @@ class DeepQLearningAgent(Agent):
             # return self.__surrounding_state().to(DEVICE)
 
         elif self.model_type == "cnn":
-            return self.game.surrounding_state().to(DEVICE)
+            return self.game.map_state().to(DEVICE)
     
     
         
@@ -155,12 +156,15 @@ if __name__ == "__main__":
     game = SnakeGame(W=10, H=10, SPEED=50)
     # agent = DeepQLearningAgent(game, "linear")
     # agent = DeepQLearningAgent(game, "linear", pretrained_model='model/linear-cpu.pth')
+    
 
-
-    agent = DeepQLearningAgent(game, "cnn", map_size=(10,10)) ### r is the radius of surrounding state
+    agent = DeepQLearningAgent(game, "cnn", map_size=(10,10))
 
     
     agent.train(epsilon=1.0, ed=0.005, n_epoch=200, filename='model/test.pth')
 
     # while True:
     #     game._play()
+
+
+    ### could you send me the package to let the mac get access to the wifi
