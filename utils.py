@@ -9,8 +9,8 @@ class Direction(Enum):
     RIGHT = ( 1, 0)
 
 class Reward(Enum): ### The reward will be return in SnakeGame._play()
-    FOOD = 10
-    CLOSER = 2 ### get closer to the food
+    FOOD = 15
+    CLOSER = 3 ### get closer to the food
     FURTHER = -1 ### get further from the food
     LIVE = 1
     DEATH = -50

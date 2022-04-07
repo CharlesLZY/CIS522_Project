@@ -1,4 +1,6 @@
 import pygame
+import torch
+import numpy as np
 
 from enum import Enum
 from collections import deque
@@ -6,6 +8,7 @@ import random
 
 from utils import Direction, Reward, ManhattanDistance
 
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class Color(Enum):
     WHITE = (255,255,255)
@@ -231,5 +234,217 @@ class SnakeGame:
         
         return valid
         
+    def naive_state(self):
+        '''
+        The same state as Q learning agent used.
+        Naive Q state : 
+        (surrounding obstacle, food direction)
+        I used 4 bits to indicate whether there are obstacles surrounding the snake head
+        (0/1, 0/1, 0/1, 0/1): (up, down, left, right)
+        I used 2 bits to indicate the food direction:
+        (-1, 1) ( 0, 1) ( 1, 1)
+        (-1, 0)   head  ( 1, 0)
+        (-1,-1) (0, -1) ( 1,-1)
+        There are 2*2*2*2*8 = 128 states in total.
+        There are 4 possible actions UP, DOWN, LEFT, RIGHT in each state.
+        Therefore, the Q table size will be 128 * 4 = 512.
+        '''
+
+        head_pos = self.head_pos
+        food_pos = self.food_pos
+        whitespace = self.whitespace
+        assert food_pos is not None ### if there is no food on the board, the snake must have filled the board
+
+        ### 6 bits state (up, down, left, right, food_dirX, food_dirY)
+        state = [None]*6
+        
+        up_pos = (head_pos[0], head_pos[1]-1)
+        if up_pos in whitespace or up_pos == food_pos: ### empty space at up pos
+            state[0] = 0
+        else: ### there is obstacle at up pos
+            state[0] = 1
+
+        down_pos = (head_pos[0], head_pos[1]+1)
+        if down_pos in whitespace or down_pos == food_pos: ### empty space at down pos
+            state[1] = 0
+        else: ### there is obstacle at down pos
+            state[1] = 1
+        
+        left_pos = (head_pos[0]-1, head_pos[1])
+        if left_pos in whitespace or left_pos == food_pos: ### empty space at left pos
+            state[2] = 0
+        else: ### there is obstacle at left pos
+            state[2] = 1
+
+        right_pos = (head_pos[0]+1, head_pos[1])
+        if right_pos in whitespace or right_pos == food_pos: ### empty space at right pos
+            state[3] = 0
+        else: ### there is obstacle at right pos
+            state[3] = 1
+        
+        ### food direction x
+        if food_pos[0] > head_pos[0]:
+            state[4] = 1
+        elif food_pos[0] < head_pos[0]:
+            state[4] = -1
+        else:
+            state[4] = 0
+        ### food direction y
+        if food_pos[1] > head_pos[1]:
+            state[5] = 1
+        elif food_pos[1] < head_pos[1]:
+            state[5] = -1
+        else:
+            state[5] = 0
+        
+        return torch.tensor(state, dtype=torch.float).to(DEVICE)
+
+
+    ### Theoretically, CNN may not work well because of its strong prior assumption:
+    ### the image pixels have strong relationship with its neighbours
+    ### local features may not be useful in snake game
+    def surrounding_state(self, r=3): 
+        '''
+        the surrounding state is defined as the area of which the snake head is the center
+                  |
+                  r
+                  |
+        <-- r -- head -- r -->
+                  |
+                  r
+                  |        
+        '''
+        WALL = 0
+        EMPTY = 1
+        SNAKE_BODY = 0
+        SNAKE_HEAD = 0
+        SNAKE_TAIL = 0
+        FOOD = 5
+
+        W = self.W
+        H = self.H
+        empty_space = list(self.whitespace)
+        food_pos = self.food_pos
+        head_pos = self.snake[-1]
+        tail_pos = self.snake[0] 
+        body = list(self.snake)[1: len(self.snake)-1]
+        wall = list(self.wall)
+        
+        state = np.zeros((2*r+1, 2*r+1))
+        ### (offset_x, offset_y) is the coordinate of the left-up corner of the surrounding area
+        offset_x, offset_y = head_pos[0] - r, head_pos[1] - r 
+
+        ### set the position outside the map as WALL
+        for x in range(2*r+1):
+            for y in range(2*r+1):
+                if x + offset_x < 0 or y + offset_y < 0 or x + offset_x >= W or y + offset_y >= H:
+                    state[y][x] = WALL
+
+        ### set wall
+        for px, py in wall:
+            x, y = px - offset_x, py - offset_y
+            if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+                continue
+            else:
+                state[y][x] = WALL    
+
+        ### set empty space
+        for px, py in empty_space:
+            x, y = px - offset_x, py - offset_y
+            if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+                continue
+            else:
+                state[y][x] = EMPTY   
+        
+        ### set snake body
+        for px, py in body:
+            x, y = px - offset_x, py - offset_y
+            if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+                continue
+            else:
+                state[y][x] = SNAKE_BODY
+        
+        ### set snake tail
+        px, py = tail_pos
+        x, y = px - offset_x, py - offset_y
+        if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+            pass
+        else:
+            state[y][x] = SNAKE_TAIL
+
+        ### set snake head
+        px, py = head_pos
+        x, y = px - offset_x, py - offset_y
+        if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+            pass
+        else:
+            state[y][x] = SNAKE_HEAD
+
+        ### set food
+        px, py = food_pos
+        x, y = px - offset_x, py - offset_y
+        if x < 0 or y < 0 or x >= 2*r+1 or y >= 2*r+1:
+            pass
+        else:
+            state[y][x] = FOOD
+        
+        print(state)
+        state = torch.tensor(state, dtype=torch.float).to(DEVICE)
+        return state.reshape(1,1, 2*r+1, 2*r+1)
+
+    def map_state(self):
+        WALL = 0
+        EMPTY = 1
+        SNAKE_BODY = 0
+        SNAKE_HEAD = 0
+        SNAKE_TAIL = 0
+        FOOD = 5
+
+        W = self.W
+        H = self.H
+        empty_space = list(self.whitespace)
+        food_pos = self.food_pos
+        head_pos = self.snake[-1]
+        tail_pos = self.snake[0] 
+        body = list(self.snake)[1: len(self.snake)-1]
+        wall = list(self.wall)
+        
+        state = np.zeros((H+2, W+2))
+
+        ### set the position outside the map as WALL
+        for x in range(W+2):
+            state[0][x] = WALL
+            state[-1][x] = WALL
+        for y in range(H+2):
+            state[y][0] = WALL
+            state[y][-1] = WALL
+
+        ### set wall
+        for x, y in wall:
+            state[y+1][x+1] = WALL     
+
+        ### set empty space
+        for x, y in empty_space:
+            state[y+1][x+1] = EMPTY   
+        
+        ### set snake body
+        for x, y in body:
+            state[y+1][x+1] = SNAKE_BODY
+        
+        ### set snake tail
+        x, y = tail_pos
+        state[y+1][x+1] = SNAKE_TAIL
+
+        ### set snake head
+        x, y = head_pos
+        state[y+1][x+1] = SNAKE_HEAD
+
+        ### set food
+        x, y = food_pos
+        state[y+1][x+1] = FOOD
+        
+        # print(state)
+        state = torch.tensor(state, dtype=torch.float).to(DEVICE)
+        return state.reshape(1,1, H+2, W+2)
 
 
