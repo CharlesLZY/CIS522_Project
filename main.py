@@ -6,8 +6,11 @@ from BoringAgent import BoringAgent
 from SearchAgent import GreedyAgent, AstarAgent
 from QLearningAgent import QLearningAgent
 from DeepQLearningAgent import DeepQLearningAgent
+import torch
+from AutoEncoder import Encoder
 
 import utils
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-W", "--width", type=int, default=16, help="window width")
@@ -18,7 +21,9 @@ parser.add_argument("-v", "--verbose", action="store_true", help="print verbose"
 parser.add_argument("-seed", type=int, default=0, help="random seed")
 parser.add_argument("-a", "--agent", type=str, default="", choices=["", "random", "boring", "greedy", "astar", "qlearning", "deepq"], help="agent type")
 parser.add_argument("-f", "--file", type=str, help="pretrained model")
-parser.add_argument("-t", "--model_type", type=str, choices=["linear"], help="model type")
+parser.add_argument("-t", "--model_type", type=str, choices=["linear", "encoder"], help="model type")
+parser.add_argument("-e", "--encoder", type=str, help="pretrained encoder model")
+parser.add_argument("-fs", "--feature_size", type=int, default=8, help="pretrained encoder model")
 
 if __name__ == "__main__":
 
@@ -56,7 +61,13 @@ if __name__ == "__main__":
         if not args.model_type:
             print("Please specify the model type. Usage: main.py -a qlearning -f model.pkl")
             exit()
-        agent = DeepQLearningAgent(game, model_type=args.model_type, pretrained_model=args.file)
+        if args.model_type == "encoder":
+            encoder = Encoder(W=args.width, H=args.height, feature_size=args.feature_size)
+            encoder.encoder.load_state_dict(torch.load(args.encoder))
+            agent = DeepQLearningAgent(game, "encoder", input_size=args.feature_size, encoder=encoder)
+        else:
+            agent = DeepQLearningAgent(game, model_type=args.model_type, pretrained_model=args.file)
+        
         agent.model.eval()
 
     while True:
