@@ -6,7 +6,9 @@ from enum import Enum
 from collections import deque
 import random
 
-from utils import Direction, Reward, ManhattanDistance
+from AutoEncoder import Encoder
+
+from utils import Direction, Reward, Value, ManhattanDistance
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -27,8 +29,8 @@ class SnakeGame:
         ### Set Game Parameter
         self.W = W
         self.H = H
-        self.Width = (self.W+2) * BLOCK_SIZE ### window width 
-        self.Height = (self.H+2) * BLOCK_SIZE ### window height 
+        self.Width = (self.W) * BLOCK_SIZE ### window width
+        self.Height = (self.H) * BLOCK_SIZE ### window height 
         self.BLOCK_SIZE = BLOCK_SIZE if BLOCK_SIZE > 20 else 20 ### block size for display
         self.SPEED = SPEED
         self.VERBOSE = VERBOSE ### whether to print game information
@@ -52,21 +54,19 @@ class SnakeGame:
     ### for the scalability to implement maze
     def _setWall(self):
         self.wall = set()
-        for i in range(-1, self.W+1):
-            self.wall.add((i, -1))
-            self.wall.add((i, self.H))
-        for i in range(-1, self.H+1):
-            self.wall.add((-1, i))
-            self.wall.add((self.W, i))
+
     
     ### reset the game state to initial state
     def _restart(self):
         self.round += 1 ### a new round start
+        self.whitespace = set([(x,y) for x in range(self.W) for y in range(self.H)]) ### for fast generating new food 
+
+        for wall in self.wall:
+            self.whitespace.remove(wall)
 
         self.head_pos = (self.W // 2, self.H // 2) ### the initial postion of head
         ### snake[-1] is head and snake[0] is tail
         self.snake = deque([(self.head_pos[0], self.head_pos[1] + 1), self.head_pos]) ### for fast updating snake
-        self.whitespace = set([(x,y) for x in range(self.W) for y in range(self.H)]) ### for fast generating new food 
         self.whitespace.remove(self.snake[0])
         self.whitespace.remove(self.snake[1])
         self.score = 0 ### current score
@@ -117,6 +117,7 @@ class SnakeGame:
 
     ### play the game
     def _play(self, move=None, GUI=True): ### we can specify the move instead of let the agent decide the next move
+        ### Reward is defined in utils.py
         reward = Reward.LIVE.value
         dead = False
 
@@ -189,20 +190,20 @@ class SnakeGame:
 
         ### draw the wall
         for x,y in self.wall:
-            pygame.draw.rect(self.display, Color.BLACK.value, pygame.Rect((x+1) * BLOCK_SIZE, (y+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+            pygame.draw.rect(self.display, Color.BLACK.value, pygame.Rect((x) * BLOCK_SIZE, (y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
 
         ### draw the snake
         for x,y in self.snake:
-            pygame.draw.rect(self.display, Color.GREY1.value, pygame.Rect((x+1) * BLOCK_SIZE, (y+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, Color.GREY2.value, pygame.Rect((x+1) * BLOCK_SIZE + BORDER, (y+1) * BLOCK_SIZE + BORDER, BLOCK_SIZE - 2 * BORDER, BLOCK_SIZE - 2 * BORDER))
+            pygame.draw.rect(self.display, Color.GREY1.value, pygame.Rect((x) * BLOCK_SIZE, (y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+            pygame.draw.rect(self.display, Color.GREY2.value, pygame.Rect((x) * BLOCK_SIZE + BORDER, (y) * BLOCK_SIZE + BORDER, BLOCK_SIZE - 2 * BORDER, BLOCK_SIZE - 2 * BORDER))
         
         ### color the head
-        pygame.draw.rect(self.display, Color.BLUE.value, pygame.Rect((self.snake[-1][0]+1) * BLOCK_SIZE, (self.snake[-1][1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+        pygame.draw.rect(self.display, Color.BLUE.value, pygame.Rect((self.snake[-1][0]) * BLOCK_SIZE, (self.snake[-1][1]) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
         ### color the tail
-        pygame.draw.rect(self.display, Color.RED.value, pygame.Rect((self.snake[0][0]+1) * BLOCK_SIZE, (self.snake[0][1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+        pygame.draw.rect(self.display, Color.RED.value, pygame.Rect((self.snake[0][0]) * BLOCK_SIZE, (self.snake[0][1]) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
 
         if self.food_pos: ### if there is food, draw the food
-            pygame.draw.rect(self.display, Color.GREEN.value, pygame.Rect((self.food_pos[0]+1) * BLOCK_SIZE, (self.food_pos[1]+1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+            pygame.draw.rect(self.display, Color.GREEN.value, pygame.Rect((self.food_pos[0]) * BLOCK_SIZE, (self.food_pos[1]) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
         
         pygame.display.update()
         self.clock.tick(self.SPEED)
@@ -314,12 +315,12 @@ class SnakeGame:
                   r
                   |        
         '''
-        WALL = 0
-        EMPTY = 1
-        SNAKE_BODY = 0
-        SNAKE_HEAD = 0
-        SNAKE_TAIL = 0
-        FOOD = 5
+        WALL = Value.WALL.value 
+        EMPTY = Value.EMPTY.value 
+        SNAKE_BODY = Value.SNAKE_BODY.value 
+        SNAKE_HEAD = Value.SNAKE_HEAD.value 
+        SNAKE_TAIL = Value.SNAKE_TAIL.value 
+        FOOD = Value.FOOD.value 
 
         W = self.W
         H = self.H
@@ -392,13 +393,14 @@ class SnakeGame:
         state = torch.tensor(state, dtype=torch.float).to(DEVICE)
         return state.reshape(1,1, 2*r+1, 2*r+1)
 
-    def map_state(self):
-        WALL = 0
-        EMPTY = 1
-        SNAKE_BODY = 0
-        SNAKE_HEAD = 0
-        SNAKE_TAIL = 0
-        FOOD = 5
+    def map_state(self, encoder=False):
+        ### Value is defined in utils.py
+        WALL = Value.WALL.value 
+        EMPTY = Value.EMPTY.value 
+        SNAKE_BODY = Value.SNAKE_BODY.value 
+        SNAKE_HEAD = Value.SNAKE_HEAD.value 
+        SNAKE_TAIL = Value.SNAKE_TAIL.value 
+        FOOD = Value.FOOD.value 
 
         W = self.W
         H = self.H
@@ -409,42 +411,53 @@ class SnakeGame:
         body = list(self.snake)[1: len(self.snake)-1]
         wall = list(self.wall)
         
-        state = np.zeros((H+2, W+2))
-
-        ### set the position outside the map as WALL
-        for x in range(W+2):
-            state[0][x] = WALL
-            state[-1][x] = WALL
-        for y in range(H+2):
-            state[y][0] = WALL
-            state[y][-1] = WALL
+        
+        state = np.zeros((H, W))
 
         ### set wall
         for x, y in wall:
-            state[y+1][x+1] = WALL     
+            state[y][x] = WALL     
 
         ### set empty space
         for x, y in empty_space:
-            state[y+1][x+1] = EMPTY   
+            state[y][x] = EMPTY   
         
         ### set snake body
         for x, y in body:
-            state[y+1][x+1] = SNAKE_BODY
+            state[y][x] = SNAKE_BODY
         
         ### set snake tail
         x, y = tail_pos
-        state[y+1][x+1] = SNAKE_TAIL
+        state[y][x] = SNAKE_TAIL
 
         ### set snake head
         x, y = head_pos
-        state[y+1][x+1] = SNAKE_HEAD
+        state[y][x] = SNAKE_HEAD
 
         ### set food
         x, y = food_pos
-        state[y+1][x+1] = FOOD
+        state[y][x] = FOOD    
+
+ 
         
         # print(state)
-        state = torch.tensor(state, dtype=torch.float).to(DEVICE)
-        return state.reshape(1,1, H+2, W+2)
+        if encoder:
+            ### return which shape of tensor depends on which kind of structure does the encode use 
+            return torch.from_numpy(state).flatten().float()
+            ### for CNN encoder (not implemented)
+            ### return torch.from_numpy(np.expand_dims(self.map_states[idx], axis=0)).float() ### shape: (batch_size, 1, W, H)
+
+        else:
+            state = torch.tensor(state, dtype=torch.float).to(DEVICE)
+            return state.reshape(1,1, H, W)
 
 
+    '''
+    IMPORTANT!!!
+    You must make sure the model you trained used the same map size as current game does.
+    '''
+    def encoder_state(self, model):
+        state = self.map_state(encoder=True)
+        model.eval()
+        x = model(state)
+        return x.detach()

@@ -16,6 +16,14 @@ class Reward(Enum): ### The reward will be return in SnakeGame._play()
     DEATH = -50
     WIN = 100
 
+class Value(Enum): ### The value to represent the map state
+    WALL = 0
+    EMPTY = 1
+    SNAKE_BODY = 0
+    SNAKE_HEAD = 0
+    SNAKE_TAIL = 0
+    FOOD = 5
+
 def ManhattanDistance(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 

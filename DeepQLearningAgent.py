@@ -11,6 +11,8 @@ from Game import SnakeGame
 from Agent import Agent
 from utils import Direction
 
+from AutoEncoder import Encoder
+
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 # print(DEVICE)
@@ -23,7 +25,7 @@ class LinearModel(nn.Module):
         self.linear2 = nn.Linear(hidden_size, 4) ### output_size = 4 because there are 4 actions
     
     def forward(self, x):
-        x = torch.flatten(x)
+        x = torch.flatten(x) ### in case, we just pass the map to the linear model, it should flatten the 2d map first
         x = F.relu(self.linear1(x))
         x = self.linear2(x)
         return x
@@ -32,11 +34,13 @@ class CNNModel(nn.Module):
     def __init__(self, map_size, hidden_size=16):
         super(CNNModel, self).__init__()
         ### kernel size need to be tuned
+        
         H, W = map_size[0] + 2, map_size[1] + 2 ### + 2 for the border wall
         self.conv1 = nn.Conv2d(in_channels = 1, out_channels =1, kernel_size = 5, padding = 2) ### in & out channels are 1, stride = 1
         self.conv2 = nn.Conv2d(in_channels = 1, out_channels =1, kernel_size = 3)
         ### size after conv1: (H - 5 + 2*2）// 1 + 1 = H
         ### size after conv2: (H - 3) // 1 + 1
+        ### if we use CNN, we have to compute the final size after convolution to use fully connected layer
         self.fc1 = nn.Linear((H-3 + 1) * (W-3 + 1), hidden_size)
         self.fc2 = nn.Linear(hidden_size, 4) ### output_size = 4 because there are 4 actions
     
@@ -53,17 +57,30 @@ class CNNModel(nn.Module):
 
 
 class DeepQLearningAgent(Agent):
-    def __init__(self, game, model_type, map_size=None, pretrained_model=None):
+    def __init__(self, game, model_type, 
+                 input_size=6, 
+                 map_size=None, 
+                 encoder=None, 
+                 pretrained_model=None):
         super(DeepQLearningAgent, self).__init__(game)
 
         self.model_type = model_type ### set the model type
 
         if model_type == "linear":
-            self.model = LinearModel().to(DEVICE)
-            # self.model = LinearModel(input_size=121).to(DEVICE) ### if we use surrounding_state/map_state we need to specify the input_size
+            self.model = LinearModel(input_size=input_size).to(DEVICE)
 
         elif model_type == "cnn":
+            if map_size is None:
+                print("Missing map_size!")
+                exit()
             self.model = CNNModel(map_size).to(DEVICE)
+        
+        elif model_type == "encoder":
+            if encoder is None:
+                print("Missing encoder!")
+                exit()
+            self.encoder = encoder
+            self.model = LinearModel(input_size=input_size).to(DEVICE)
         
         if pretrained_model:
             self._loadModel(pretrained_model)
@@ -71,10 +88,12 @@ class DeepQLearningAgent(Agent):
     def __cur_state(self):
         if self.model_type == "linear":
             return self.game.naive_state().to(DEVICE)
-            # return self.__surrounding_state().to(DEVICE)
 
         elif self.model_type == "cnn":
             return self.game.map_state().to(DEVICE)
+
+        elif self.model_type == "encoder":
+            return self.game.encoder_state(self.encoder).to(DEVICE)
     
     
         
@@ -153,18 +172,29 @@ if __name__ == "__main__":
     When train in the small-sized map, remember to set the t in train() to a small number (e.g. 100)
     During the further training round, remember to set the epsilon in train() to 0 
     '''
-    game = SnakeGame(W=10, H=10, SPEED=50)
+    # game = SnakeGame(W=10, H=10, SPEED=50)
     # agent = DeepQLearningAgent(game, "linear")
     # agent = DeepQLearningAgent(game, "linear", pretrained_model='model/linear-cpu.pth')
     
 
-    agent = DeepQLearningAgent(game, "cnn", map_size=(10,10))
+    # agent = DeepQLearningAgent(game, "cnn", map_size=(10,10))
 
     
-    agent.train(epsilon=1.0, ed=0.005, n_epoch=200, filename='model/test.pth')
+    # agent.train(epsilon=1.0, ed=0.005, n_epoch=200, filename='model/test.pth')
 
     # while True:
     #     game._play()
 
+    ### Augmented with auto-encoder
+    ### Pipeline: 
+    ### 1. set up the Value which represents different types of blocks (defined in utils.py)
+    ### 2. train a auto-encoder (which is defined in AutoEncoder.py)
+    ### 3. load the trained-parameter to an Encoder model (which is defined in AutoEncoder.py)
+    ### 4. train a deep qlearning model use the output of the Encoder model as input feature
+    ###    just call game.encoder_state()
 
-    ### could you send me the package to let the mac get access to the wifi
+    game = SnakeGame(W=16, H=16, SPEED=50)
+    encoder = Encoder(W=16, H=16, feature_size=8)
+    encoder.encoder.load_state_dict(torch.load("model/autoencoder-cpu.pth"))
+    agent = DeepQLearningAgent(game, "encoder", input_size=8, encoder=encoder)
+    agent.train(epsilon=1.0, ed=0.005, n_epoch=2, filename='model/test.pth')
