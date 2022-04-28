@@ -11,6 +11,10 @@ import pickle
 
 from utils import Direction, Value
 
+from Game import SnakeGame
+from Agent import Agent
+from DeepQLearningAgent import DeepQLearningAgent
+
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 '''
@@ -81,8 +85,13 @@ class GameState:
         self._setWall()
         self._reset()
     
+    # def _setWall(self):
+    #     self.wall = set()
     def _setWall(self):
+        y = int(self.H / 2-2)
         self.wall = set()
+        for i in range(self.W//2, self.W):
+            self.wall.add((y, i))
     
     def _reset(self):
         self.whitespace = set([(x,y) for x in range(self.W) for y in range(self.H)]) ### for fast generating new food 
@@ -173,6 +182,71 @@ class GameState:
             self.snake.appendleft(new_body)
             self.whitespace.remove(new_body)
 
+    def naive_state(self):
+        '''
+        The same state as Q learning agent used.
+        Naive Q state : 
+        (surrounding obstacle, food direction)
+        I used 4 bits to indicate whether there are obstacles surrounding the snake head
+        (0/1, 0/1, 0/1, 0/1): (up, down, left, right)
+        I used 2 bits to indicate the food direction:
+        (-1, 1) ( 0, 1) ( 1, 1)
+        (-1, 0)   head  ( 1, 0)
+        (-1,-1) (0, -1) ( 1,-1)
+        There are 2*2*2*2*8 = 128 states in total.
+        There are 4 possible actions UP, DOWN, LEFT, RIGHT in each state.
+        Therefore, the Q table size will be 128 * 4 = 512.
+        '''
+
+        head_pos = self.snake[-1]
+        food_pos = self.food_pos
+        whitespace = self.whitespace
+        assert food_pos is not None ### if there is no food on the board, the snake must have filled the board
+
+        ### 6 bits state (up, down, left, right, food_dirX, food_dirY)
+        state = [None]*6
+        
+        up_pos = (head_pos[0], head_pos[1]-1)
+        if up_pos in whitespace or up_pos == food_pos: ### empty space at up pos
+            state[0] = 0
+        else: ### there is obstacle at up pos
+            state[0] = 1
+
+        down_pos = (head_pos[0], head_pos[1]+1)
+        if down_pos in whitespace or down_pos == food_pos: ### empty space at down pos
+            state[1] = 0
+        else: ### there is obstacle at down pos
+            state[1] = 1
+        
+        left_pos = (head_pos[0]-1, head_pos[1])
+        if left_pos in whitespace or left_pos == food_pos: ### empty space at left pos
+            state[2] = 0
+        else: ### there is obstacle at left pos
+            state[2] = 1
+
+        right_pos = (head_pos[0]+1, head_pos[1])
+        if right_pos in whitespace or right_pos == food_pos: ### empty space at right pos
+            state[3] = 0
+        else: ### there is obstacle at right pos
+            state[3] = 1
+        
+        ### food direction x
+        if food_pos[0] > head_pos[0]:
+            state[4] = 1
+        elif food_pos[0] < head_pos[0]:
+            state[4] = -1
+        else:
+            state[4] = 0
+        ### food direction y
+        if food_pos[1] > head_pos[1]:
+            state[5] = 1
+        elif food_pos[1] < head_pos[1]:
+            state[5] = -1
+        else:
+            state[5] = 0
+        
+        return torch.tensor(state, dtype=torch.float).to(DEVICE)
+
 ### refer to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 class MapStateDataset(Dataset):
     def __init__(self, filename, flatten=True):
@@ -191,6 +265,20 @@ class MapStateDataset(Dataset):
             return torch.from_numpy(np.expand_dims(self.map_states[idx], axis=0)).float() ### shape: (batch_size, 1, W, H)
 
 
+### refer to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
+class MapStateActionDataset(Dataset):
+    def __init__(self, filename):
+        f = open(filename, 'rb')
+        self.map_states = pickle.loads(f.read())
+        # from ipdb import set_trace
+        # set_trace()
+        f.close()
+    
+    def __len__(self):
+        return len(self.map_states)
+    
+    def __getitem__(self, idx):
+        return self.map_states[idx][0].flatten(),self.map_states[idx][1].flatten()
 
 ### generate map states with different snakes 
 def generateMapState(W=16, H=16, N=10000, filename="data/empty_map.pkl"):
@@ -201,7 +289,25 @@ def generateMapState(W=16, H=16, N=10000, filename="data/empty_map.pkl"):
         length = random.randint(1, W*H-2)
         game.grow(length)
         states.append(game.cur_state())
+        # print(game.cur_state())
+        # from ipdb import set_trace
+        # set_trace()
 
+    f = open(filename, 'wb')
+    f.write(pickle.dumps(states))
+    f.close()
+
+def generateMapStateWithActions(agent, W=16, H=16, N=10000, filename="data/empty_map.pkl"):
+    game = GameState(W=W, H=H)
+    states = []
+    for i in range(N): ### generate N scenes
+        game._reset()
+        length = random.randint(1, (W*H-2)/2)
+        game.grow(length)
+        action = agent.model(game.naive_state())
+        states.append((game.cur_state(), action.detach()))
+        # from ipdb import set_trace
+        # set_trace()
     f = open(filename, 'wb')
     f.write(pickle.dumps(states))
     f.close()
@@ -220,13 +326,34 @@ def train(n_epoch=10, batch_size=4, W=16, H=16, feature_size=8, dataset="data/em
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        if epoch % 10 == 0:
-            print(f"epoch: {epoch} loss: {loss.item()}")
+        # if epoch % 10 == 0:
+        print(f"epoch: {epoch} loss: {loss.item()}")
 
     param = model.encoder.state_dict()
     torch.save(param, save_path)
 
 
+def train_agent_loss(agent, n_epoch=10, batch_size=4, W=16, H=16, feature_size=6, dataset="data/empty_map.pkl", save_path="model/autoencoder-cpu.pth"):
+    dataset = MapStateActionDataset(dataset)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    model = AutoEncoder(W=W, H=H, feature_size=feature_size)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr = 1e-1, weight_decay = 1e-8)
+    for epoch in range(n_epoch):
+        for data, action in dataloader:
+            latent = model.encoder(data.float())
+            action_reconstructed = agent.model(latent)
+            
+            loss = criterion(action_reconstructed, action)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        # if epoch % 10 == 0:
+        print(f"epoch: {epoch} loss: {loss.item()}")
+
+    param = model.encoder.state_dict()
+    torch.save(param, save_path)
 
 if __name__ == "__main__":
     # model = AutoEncoder().to(DEVICE)
@@ -239,7 +366,7 @@ if __name__ == "__main__":
     # encoder.encoder.load_state_dict(torch.load("test.pth"))
     # print(encoder.state_dict())
 
-    # generateMapState()
+    generateMapState()
     
     # dataset = MapStateDataset("data/empty_map.pkl")
     # dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
@@ -247,4 +374,15 @@ if __name__ == "__main__":
     #     print(sample.size())
     #     break
 
-    train(n_epoch=2)
+    # generateMapState(N=1000000)
+
+    outf = "model/autoencoder-cpu.pth"
+    train(n_epoch=2, save_path=outf, feature_size=32)
+    
+    # data_path = "data/empty_map.pkl"
+    # game = SnakeGame(W=10, H=10, SPEED=1000)
+    # agent = DeepQLearningAgent(game, "linear", pretrained_model='model/linear-cpu.pth')
+    # generateMapStateWithActions(agent,filename=data_path, N=1000000)
+
+    # outf = "model/autoencoder-cpu-agent.pth"
+    # train_agent_loss(agent, n_epoch=2, dataset=data_path, save_path=outf)

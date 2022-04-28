@@ -1,3 +1,4 @@
+import os
 import pygame
 import torch
 import numpy as np
@@ -6,7 +7,7 @@ from enum import Enum
 from collections import deque
 import random
 
-from AutoEncoder import Encoder
+# from AutoEncoder import Encoder
 
 from utils import Direction, Reward, Value, ManhattanDistance
 
@@ -53,8 +54,16 @@ class SnakeGame:
     
     ### for the scalability to implement maze
     def _setWall(self):
+        # y = int(self.H / 2-2)
         self.wall = set()
-
+        # for i in range(self.W//2, self.W):
+        #     self.wall.add((y, i))
+    
+    # def _setWall(self):
+        # y = int(self.H / 2-2)
+        # self.wall = set()
+        # for i in range(self.W//2, self.W):
+        #     self.wall.add((y, i))
     
     ### reset the game state to initial state
     def _restart(self):
@@ -116,11 +125,18 @@ class SnakeGame:
             return self.head_dir() ### default: move forward
 
     ### play the game
-    def _play(self, move=None, GUI=True): ### we can specify the move instead of let the agent decide the next move
+    def _play(self, move=None, GUI=True, save_gif = False, save_gif_frame=-1): ### we can specify the move instead of let the agent decide the next move
         ### Reward is defined in utils.py
         reward = Reward.LIVE.value
         dead = False
 
+        if save_gif:
+            fname = f"generate_gif/img{save_gif_frame}.png"
+            os.makedirs(os.path.dirname(fname), exist_ok=True)
+            pygame.image.save(self.display, fname)
+            # from ipdb import set_trace
+            # set_trace()
+            
         if self.food_pos:
             prev_distance = ManhattanDistance(self.head_pos, self.food_pos) ### previous distance from snake head to food
 
@@ -172,6 +188,7 @@ class SnakeGame:
 
         if GUI:
             self._renderGUI() ### render current state
+        
 
         return reward, dead
 
